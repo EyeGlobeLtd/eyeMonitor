@@ -15,7 +15,6 @@ import {
 	ErrorDetails,
 	IngestionSettings,
 	InstalledIntegrations,
-	IntegrationsMarketPlace,
 	LicensePage,
 	ListAllALertsPage,
 	LiveLogs,
@@ -34,6 +33,7 @@ import {
 	ServiceMapPage,
 	ServiceMetricsPage,
 	ServicesTablePage,
+	ServiceTopLevelOperationsPage,
 	SettingsPage,
 	ShortcutsPage,
 	SignupPage,
@@ -84,6 +84,13 @@ const routes: AppRoutes[] = [
 		component: ServiceMetricsPage,
 		isPrivate: true,
 		key: 'SERVICE_METRICS',
+	},
+	{
+		path: ROUTES.SERVICE_TOP_LEVEL_OPERATIONS,
+		exact: true,
+		component: ServiceTopLevelOperationsPage,
+		isPrivate: true,
+		key: 'SERVICE_TOP_LEVEL_OPERATIONS',
 	},
 	{
 		path: ROUTES.SERVICE_MAP,
@@ -338,18 +345,11 @@ const routes: AppRoutes[] = [
 		key: 'SHORTCUTS',
 	},
 	{
-		path: ROUTES.INTEGRATIONS_INSTALLED,
+		path: ROUTES.INTEGRATIONS,
 		exact: true,
 		component: InstalledIntegrations,
 		isPrivate: true,
-		key: 'INTEGRATIONS_INSTALLED',
-	},
-	{
-		path: ROUTES.INTEGRATIONS_MARKETPLACE,
-		exact: true,
-		component: IntegrationsMarketPlace,
-		isPrivate: true,
-		key: 'INTEGRATIONS_MARKETPLACE',
+		key: 'INTEGRATIONS',
 	},
 ];
 
