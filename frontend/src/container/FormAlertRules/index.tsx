@@ -13,12 +13,13 @@ import {
 import saveAlertApi from 'api/alerts/save';
 import testAlertApi from 'api/alerts/testAlert';
 import logEvent from 'api/common/logEvent';
-import FacingIssueBtn from 'components/facingIssueBtn/FacingIssueBtn';
-import { alertHelpMessage } from 'components/facingIssueBtn/util';
+import LaunchChatSupport from 'components/LaunchChatSupport/LaunchChatSupport';
+import { alertHelpMessage } from 'components/LaunchChatSupport/util';
 import { ALERTS_DATA_SOURCE_MAP } from 'constants/alerts';
 import { FeatureKeys } from 'constants/features';
 import { QueryParams } from 'constants/query';
 import { PANEL_TYPES } from 'constants/queryBuilder';
+import { REACT_QUERY_KEY } from 'constants/reactQueryKeys';
 import ROUTES from 'constants/routes';
 import QueryTypeTag from 'container/NewWidget/LeftContainer/QueryTypeTag';
 import PlotTag from 'container/NewWidget/LeftContainer/WidgetGraph/PlotTag';
@@ -101,6 +102,7 @@ function FormAlertRules({
 	const isNewRule = ruleId === 0;
 
 	const [loading, setLoading] = useState(false);
+	const [queryStatus, setQueryStatus] = useState<string>('');
 
 	// alertDef holds the form values to be posted
 	const [alertDef, setAlertDef] = useState<AlertDef>(initialValue);
@@ -368,7 +370,7 @@ function FormAlertRules({
 				});
 
 				// invalidate rule in cache
-				ruleCache.invalidateQueries(['ruleId', ruleId]);
+				ruleCache.invalidateQueries([REACT_QUERY_KEY.ALERT_RULE_DETAILS, ruleId]);
 
 				// eslint-disable-next-line sonarjs/no-identical-functions
 				setTimeout(() => {
@@ -523,6 +525,7 @@ function FormAlertRules({
 			alertDef={alertDef}
 			yAxisUnit={yAxisUnit || ''}
 			graphType={panelType || PANEL_TYPES.TIME_SERIES}
+			setQueryStatus={setQueryStatus}
 		/>
 	);
 
@@ -540,6 +543,7 @@ function FormAlertRules({
 			selectedInterval={globalSelectedInterval}
 			yAxisUnit={yAxisUnit || ''}
 			graphType={panelType || PANEL_TYPES.TIME_SERIES}
+			setQueryStatus={setQueryStatus}
 		/>
 	);
 
@@ -665,7 +669,8 @@ function FormAlertRules({
 									disabled={
 										isAlertNameMissing ||
 										isAlertAvailableToSave ||
-										!isChannelConfigurationValid
+										!isChannelConfigurationValid ||
+										queryStatus === 'error'
 									}
 								>
 									{isNewRule ? t('button_createrule') : t('button_savechanges')}
@@ -674,7 +679,11 @@ function FormAlertRules({
 
 							<ActionButton
 								loading={loading || false}
-								disabled={isAlertNameMissing || !isChannelConfigurationValid}
+								disabled={
+									isAlertNameMissing ||
+									!isChannelConfigurationValid ||
+									queryStatus === 'error'
+								}
 								type="default"
 								onClick={onTestRuleHandler}
 							>
@@ -704,7 +713,7 @@ function FormAlertRules({
 						>
 							Check an example alert
 						</Button>
-						<FacingIssueBtn
+						<LaunchChatSupport
 							attributes={{
 								alert: alertDef?.alert,
 								alertType: alertDef?.alertType,

@@ -1,6 +1,7 @@
 import { ConfigProvider } from 'antd';
 import getLocalStorageApi from 'api/browser/localstorage/get';
 import setLocalStorageApi from 'api/browser/localstorage/set';
+import logEvent from 'api/common/logEvent';
 import NotFound from 'components/NotFound';
 import Spinner from 'components/Spinner';
 import { FeatureKeys } from 'constants/features';
@@ -18,6 +19,7 @@ import { ResourceProvider } from 'hooks/useResourceAttribute';
 import history from 'lib/history';
 import { identity, pick, pickBy } from 'lodash-es';
 import posthog from 'posthog-js';
+import AlertRuleProvider from 'providers/Alert';
 import { DashboardProvider } from 'providers/Dashboard/Dashboard';
 import { QueryBuilderProvider } from 'providers/QueryBuilder';
 import { Suspense, useEffect, useState } from 'react';
@@ -48,7 +50,7 @@ function App(): JSX.Element {
 
 	const dispatch = useDispatch<Dispatch<AppActions>>();
 
-	const { trackPageView, trackEvent } = useAnalytics();
+	const { trackPageView } = useAnalytics();
 
 	const { hostname, pathname } = window.location;
 
@@ -64,6 +66,14 @@ function App(): JSX.Element {
 		const isChatSupportEnabled =
 			allFlags.find((flag) => flag.name === FeatureKeys.CHAT_SUPPORT)?.active ||
 			false;
+
+		const isPremiumSupportEnabled =
+			allFlags.find((flag) => flag.name === FeatureKeys.PREMIUM_SUPPORT)?.active ||
+			false;
+
+		const showAddCreditCardModal =
+			!isPremiumSupportEnabled &&
+			!licenseData?.payload?.trialConvertedToSubscription;
 
 		dispatch({
 			type: UPDATE_FEATURE_FLAG_RESPONSE,
@@ -81,7 +91,7 @@ function App(): JSX.Element {
 			setRoutes(newRoutes);
 		}
 
-		if (isLoggedInState && isChatSupportEnabled) {
+		if (isLoggedInState && isChatSupportEnabled && !showAddCreditCardModal) {
 			// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 			// @ts-ignore
 			window.Intercom('boot', {
@@ -199,7 +209,7 @@ function App(): JSX.Element {
 					LOCALSTORAGE.THEME_ANALYTICS_V1,
 				);
 				if (!isThemeAnalyticsSent) {
-					trackEvent('Theme Analytics', {
+					logEvent('Theme Analytics', {
 						theme: isDarkMode ? THEME_MODE.DARK : THEME_MODE.LIGHT,
 						user: pick(user, ['email', 'userId', 'name']),
 						org,
@@ -227,22 +237,24 @@ function App(): JSX.Element {
 							<QueryBuilderProvider>
 								<DashboardProvider>
 									<KeyboardHotkeysProvider>
-										<AppLayout>
-											<Suspense fallback={<Spinner size="large" tip="Loading..." />}>
-												<Switch>
-													{routes.map(({ path, component, exact }) => (
-														<Route
-															key={`${path}`}
-															exact={exact}
-															path={path}
-															component={component}
-														/>
-													))}
+										<AlertRuleProvider>
+											<AppLayout>
+												<Suspense fallback={<Spinner size="large" tip="Loading..." />}>
+													<Switch>
+														{routes.map(({ path, component, exact }) => (
+															<Route
+																key={`${path}`}
+																exact={exact}
+																path={path}
+																component={component}
+															/>
+														))}
 
-													<Route path="*" component={NotFound} />
-												</Switch>
-											</Suspense>
-										</AppLayout>
+														<Route path="*" component={NotFound} />
+													</Switch>
+												</Suspense>
+											</AppLayout>
+										</AlertRuleProvider>
 									</KeyboardHotkeysProvider>
 								</DashboardProvider>
 							</QueryBuilderProvider>

@@ -1,8 +1,7 @@
 import './TraceDetails.styles.scss';
 
 import { FilterOutlined } from '@ant-design/icons';
-import { Button, Col, Typography } from 'antd';
-import Sider from 'antd/es/layout/Sider';
+import { Button, Col, Layout, Typography } from 'antd';
 import cx from 'classnames';
 import {
 	StyledCol,
@@ -41,6 +40,8 @@ import {
 	IIntervalUnit,
 	INTERVAL_UNITS,
 } from './utils';
+
+const { Sider } = Layout;
 
 function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 	const spanServiceColors = useMemo(
@@ -218,10 +219,18 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 					<Col flex={`${SPAN_DETAILS_LEFT_COL_WIDTH}px`} />
 					<Col flex="auto">
 						<StyledSpace styledclass={[styles.floatRight]}>
-							<Button onClick={onFocusSelectedSpanHandler} icon={<FilterOutlined />}>
+							<Button
+								onClick={onFocusSelectedSpanHandler}
+								icon={<FilterOutlined />}
+								data-testid="span-focus-btn"
+							>
 								Focus on selected span
 							</Button>
-							<Button type="default" onClick={onResetHandler}>
+							<Button
+								type="default"
+								onClick={onResetHandler}
+								data-testid="reset-focus"
+							>
 								Reset Focus
 							</Button>
 						</StyledSpace>
@@ -261,6 +270,7 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 				collapsedWidth={40}
 				defaultCollapsed
 				onCollapse={(value): void => setCollapsed(value)}
+				data-testid="span-details-sider"
 			>
 				{!collapsed && (
 					<StyledCol styledclass={[styles.selectedSpanDetailContainer]}>

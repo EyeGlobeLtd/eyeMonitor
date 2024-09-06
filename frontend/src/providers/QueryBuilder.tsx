@@ -27,7 +27,7 @@ import { createIdFromObjectFields } from 'lib/createIdFromObjectFields';
 import { createNewBuilderItemName } from 'lib/newQueryBuilder/createNewBuilderItemName';
 import { getOperatorsBySourceAndPanelType } from 'lib/newQueryBuilder/getOperatorsBySourceAndPanelType';
 import { replaceIncorrectObjectFields } from 'lib/replaceIncorrectObjectFields';
-import { get, merge, set } from 'lodash-es';
+import { cloneDeep, get, merge, set } from 'lodash-es';
 import {
 	createContext,
 	PropsWithChildren,
@@ -62,6 +62,8 @@ import { v4 as uuid } from 'uuid';
 export const QueryBuilderContext = createContext<QueryBuilderContextType>({
 	currentQuery: initialQueriesMap.metrics,
 	supersetQuery: initialQueriesMap.metrics,
+	lastUsedQuery: null,
+	setLastUsedQuery: () => {},
 	setSupersetQuery: () => {},
 	stagedQuery: initialQueriesMap.metrics,
 	initialDataSource: null,
@@ -117,6 +119,7 @@ export function QueryBuilderProvider({
 
 	const [currentQuery, setCurrentQuery] = useState<QueryState>(queryState);
 	const [supersetQuery, setSupersetQuery] = useState<QueryState>(queryState);
+	const [lastUsedQuery, setLastUsedQuery] = useState<number | null>(0);
 	const [stagedQuery, setStagedQuery] = useState<Query | null>(null);
 
 	const [queryType, setQueryType] = useState<EQueryType>(queryTypeParam);
@@ -230,6 +233,8 @@ export function QueryBuilderProvider({
 				timeUpdated ? merge(currentQuery, newQueryState) : newQueryState,
 			);
 			setQueryType(type);
+			// this is required to reset the last used query when navigating or initializing the query builder
+			setLastUsedQuery(0);
 		},
 		[prepareQueryBuilderData, currentQuery],
 	);
@@ -532,7 +537,7 @@ export function QueryBuilderProvider({
 					if (!panelType) {
 						return newQueryItem;
 					}
-					const queryItem = item as IBuilderQuery;
+					const queryItem = cloneDeep(item) as IBuilderQuery;
 					const propsRequired =
 						panelTypeDataSourceFormValuesMap[panelType as keyof PartialPanelTypes]?.[
 							queryItem.dataSource
@@ -829,7 +834,7 @@ export function QueryBuilderProvider({
 				unit,
 			}));
 		},
-		[setCurrentQuery],
+		[setCurrentQuery, setSupersetQuery],
 	);
 
 	const query: Query = useMemo(
@@ -857,6 +862,8 @@ export function QueryBuilderProvider({
 		() => ({
 			currentQuery: query,
 			supersetQuery: superQuery,
+			lastUsedQuery,
+			setLastUsedQuery,
 			setSupersetQuery,
 			stagedQuery,
 			initialDataSource,
@@ -884,6 +891,7 @@ export function QueryBuilderProvider({
 		[
 			query,
 			superQuery,
+			lastUsedQuery,
 			stagedQuery,
 			initialDataSource,
 			panelType,

@@ -4,6 +4,7 @@ import './SideNav.styles.scss';
 
 import { Color } from '@signozhq/design-tokens';
 import { Button, Tooltip } from 'antd';
+import logEvent from 'api/common/logEvent';
 import cx from 'classnames';
 import { FeatureKeys } from 'constants/features';
 import ROUTES from 'constants/routes';
@@ -179,6 +180,11 @@ function SideNav({
 	};
 
 	const onClickShortcuts = (e: MouseEvent): void => {
+		// eslint-disable-next-line sonarjs/no-duplicate-string
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: '/shortcuts',
+			menuLabel: 'Keyboard Shortcuts',
+		});
 		if (isCtrlMetaKey(e)) {
 			openInNewTab('/shortcuts');
 		} else {
@@ -187,6 +193,10 @@ function SideNav({
 	};
 
 	const onClickGetStarted = (event: MouseEvent): void => {
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: '/get-started',
+			menuLabel: 'Get Started',
+		});
 		if (isCtrlMetaKey(event)) {
 			openInNewTab('/get-started');
 		} else {
@@ -313,6 +323,10 @@ function SideNav({
 		} else if (item) {
 			onClickHandler(item?.key as string, event);
 		}
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: item?.key,
+			menuLabel: item?.label,
+		});
 	};
 
 	useEffect(() => {
@@ -333,6 +347,10 @@ function SideNav({
 			onClickHandler(ROUTES.ALL_DASHBOARD, null),
 		);
 
+		registerShortcut(GlobalShortcuts.NavigateToMessagingQueues, () =>
+			onClickHandler(ROUTES.MESSAGING_QUEUES, null),
+		);
+
 		registerShortcut(GlobalShortcuts.NavigateToAlerts, () =>
 			onClickHandler(ROUTES.LIST_ALL_ALERT, null),
 		);
@@ -348,6 +366,7 @@ function SideNav({
 			deregisterShortcut(GlobalShortcuts.NavigateToDashboards);
 			deregisterShortcut(GlobalShortcuts.NavigateToAlerts);
 			deregisterShortcut(GlobalShortcuts.NavigateToExceptions);
+			deregisterShortcut(GlobalShortcuts.NavigateToMessagingQueues);
 		};
 	}, [deregisterShortcut, onClickHandler, onCollapse, registerShortcut]);
 
@@ -440,6 +459,10 @@ function SideNav({
 									isActive={activeMenuKey === item?.key}
 									onClick={(event: MouseEvent): void => {
 										handleUserManagentMenuItemClick(item?.key as string, event);
+										logEvent('Sidebar: Menu clicked', {
+											menuRoute: item?.key,
+											menuLabel: item?.label,
+										});
 									}}
 								/>
 							),
@@ -456,6 +479,10 @@ function SideNav({
 									} else {
 										history.push(`${inviteMemberMenuItem.key}`);
 									}
+									logEvent('Sidebar: Menu clicked', {
+										menuRoute: inviteMemberMenuItem?.key,
+										menuLabel: inviteMemberMenuItem?.label,
+									});
 								}}
 							/>
 						)}
@@ -470,6 +497,10 @@ function SideNav({
 										userSettingsMenuItem?.key as string,
 										event,
 									);
+									logEvent('Sidebar: Menu clicked', {
+										menuRoute: userSettingsMenuItem?.key,
+										menuLabel: 'User',
+									});
 								}}
 							/>
 						)}
