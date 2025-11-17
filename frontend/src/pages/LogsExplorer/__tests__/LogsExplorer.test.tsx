@@ -14,6 +14,7 @@ import {
 	QueryBuilderProvider,
 } from 'providers/QueryBuilder';
 import MockQueryClientProvider from 'providers/test/MockQueryClientProvider';
+import TimezoneProvider from 'providers/Timezone';
 import { I18nextProvider } from 'react-i18next';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
@@ -26,6 +27,21 @@ import { Query } from 'types/api/queryBuilder/queryBuilderData';
 import LogsExplorer from '../index';
 
 const queryRangeURL = 'http://localhost/api/v3/query_range';
+
+jest.mock('uplot', () => {
+	const paths = {
+		spline: jest.fn(),
+		bars: jest.fn(),
+	};
+	const uplotMock = jest.fn(() => ({
+		paths,
+	}));
+	return {
+		paths,
+		default: uplotMock,
+	};
+});
+
 // mocking the graph components in this test as this should be handled separately
 jest.mock(
 	'container/TimeSeriesView/TimeSeriesView',
@@ -77,7 +93,9 @@ describe('Logs Explorer Tests', () => {
 					<I18nextProvider i18n={i18n}>
 						<MockQueryClientProvider>
 							<QueryBuilderProvider>
-								<LogsExplorer />
+								<TimezoneProvider>
+									<LogsExplorer />
+								</TimezoneProvider>
 							</QueryBuilderProvider>
 						</MockQueryClientProvider>
 					</I18nextProvider>
@@ -126,7 +144,9 @@ describe('Logs Explorer Tests', () => {
 								<VirtuosoMockContext.Provider
 									value={{ viewportHeight: 300, itemHeight: 100 }}
 								>
-									<LogsExplorer />
+									<TimezoneProvider>
+										<LogsExplorer />
+									</TimezoneProvider>
 								</VirtuosoMockContext.Provider>
 							</QueryBuilderProvider>
 						</MockQueryClientProvider>
@@ -137,11 +157,7 @@ describe('Logs Explorer Tests', () => {
 
 		// check for loading state to be not present
 		await waitFor(() =>
-			expect(
-				queryByText(
-					`Just a bit of patience, just a little bit’s enough ⎯ we’re getting your logs!`,
-				),
-			).not.toBeInTheDocument(),
+			expect(queryByText(`Retrieving your logs!`)).not.toBeInTheDocument(),
 		);
 
 		// check for no data state to not be present
@@ -214,7 +230,9 @@ describe('Logs Explorer Tests', () => {
 								<VirtuosoMockContext.Provider
 									value={{ viewportHeight: 300, itemHeight: 100 }}
 								>
-									<LogsExplorer />
+									<TimezoneProvider>
+										<LogsExplorer />
+									</TimezoneProvider>
 								</VirtuosoMockContext.Provider>
 							</QueryBuilderContext.Provider>
 						</MockQueryClientProvider>
@@ -242,7 +260,9 @@ describe('Logs Explorer Tests', () => {
 					<I18nextProvider i18n={i18n}>
 						<MockQueryClientProvider>
 							<QueryBuilderProvider>
-								<LogsExplorer />,
+								<TimezoneProvider>
+									<LogsExplorer />
+								</TimezoneProvider>
 							</QueryBuilderProvider>
 						</MockQueryClientProvider>
 					</I18nextProvider>

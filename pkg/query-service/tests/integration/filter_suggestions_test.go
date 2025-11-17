@@ -19,6 +19,7 @@ import (
 	"go.signoz.io/signoz/pkg/query-service/model"
 	v3 "go.signoz.io/signoz/pkg/query-service/model/v3"
 	"go.signoz.io/signoz/pkg/query-service/utils"
+	"go.uber.org/zap"
 )
 
 // If no data has been received yet, filter suggestions should contain
@@ -59,7 +60,9 @@ func TestLogsFilterSuggestionsWithoutExistingFilter(t *testing.T) {
 	testAttribValue := "test-container"
 
 	tb.mockAttribKeysQueryResponse([]v3.AttributeKey{testAttrib})
-	tb.mockAttribValuesQueryResponse(testAttrib, []string{testAttribValue})
+	tb.mockAttribValuesQueryResponse(
+		[]v3.AttributeKey{testAttrib}, [][]string{{testAttribValue}},
+	)
 	suggestionsQueryParams := map[string]string{}
 	suggestionsResp := tb.GetQBFilterSuggestionsForLogs(suggestionsQueryParams)
 
@@ -71,6 +74,7 @@ func TestLogsFilterSuggestionsWithoutExistingFilter(t *testing.T) {
 	))
 
 	require.Greater(len(suggestionsResp.ExampleQueries), 0)
+
 	require.True(slices.ContainsFunc(
 		suggestionsResp.ExampleQueries, func(q v3.FilterSet) bool {
 			return slices.ContainsFunc(q.Items, func(i v3.FilterItem) bool {
@@ -113,7 +117,10 @@ func TestLogsFilterSuggestionsWithExistingFilter(t *testing.T) {
 	}
 
 	tb.mockAttribKeysQueryResponse([]v3.AttributeKey{testAttrib, testFilterAttrib})
-	tb.mockAttribValuesQueryResponse(testAttrib, []string{testAttribValue})
+	tb.mockAttribValuesQueryResponse(
+		[]v3.AttributeKey{testAttrib, testFilterAttrib},
+		[][]string{{testAttribValue}, {testFilterAttribValue}},
+	)
 
 	testFilterJson, err := json.Marshal(testFilter)
 	require.Nil(err, "couldn't serialize existing filter to JSON")
@@ -131,14 +138,70 @@ func TestLogsFilterSuggestionsWithExistingFilter(t *testing.T) {
 	}
 }
 
+func TestResourceAttribsRankedHigherInLogsFilterSuggestions(t *testing.T) {
+	require := require.New(t)
+
+	tagKeys := []v3.AttributeKey{}
+	for _, k := range []string{"user_id", "user_email"} {
+		tagKeys = append(tagKeys, v3.AttributeKey{
+			Key:      k,
+			Type:     v3.AttributeKeyTypeTag,
+			DataType: v3.AttributeKeyDataTypeString,
+			IsColumn: false,
+		})
+	}
+
+	specialResourceAttrKeys := []v3.AttributeKey{}
+	for _, k := range []string{"service", "env"} {
+		specialResourceAttrKeys = append(specialResourceAttrKeys, v3.AttributeKey{
+			Key:      k,
+			Type:     v3.AttributeKeyTypeResource,
+			DataType: v3.AttributeKeyDataTypeString,
+			IsColumn: false,
+		})
+	}
+
+	otherResourceAttrKeys := []v3.AttributeKey{}
+	for _, k := range []string{"container_name", "container_id"} {
+		otherResourceAttrKeys = append(otherResourceAttrKeys, v3.AttributeKey{
+			Key:      k,
+			Type:     v3.AttributeKeyTypeResource,
+			DataType: v3.AttributeKeyDataTypeString,
+			IsColumn: false,
+		})
+	}
+
+	tb := NewFilterSuggestionsTestBed(t)
+
+	mockAttrKeysInDB := append(tagKeys, otherResourceAttrKeys...)
+	mockAttrKeysInDB = append(mockAttrKeysInDB, specialResourceAttrKeys...)
+
+	tb.mockAttribKeysQueryResponse(mockAttrKeysInDB)
+
+	expectedTopSuggestions := append(specialResourceAttrKeys, otherResourceAttrKeys...)
+	expectedTopSuggestions = append(expectedTopSuggestions, tagKeys...)
+
+	tb.mockAttribValuesQueryResponse(
+		expectedTopSuggestions[:2], [][]string{{"test"}, {"test"}},
+	)
+
+	suggestionsQueryParams := map[string]string{"examplesLimit": "2"}
+	suggestionsResp := tb.GetQBFilterSuggestionsForLogs(suggestionsQueryParams)
+
+	require.Equal(
+		expectedTopSuggestions,
+		suggestionsResp.AttributeKeys[:len(expectedTopSuggestions)],
+	)
+}
+
 // Mocks response for CH queries made by reader.GetLogAttributeKeys
 func (tb *FilterSuggestionsTestBed) mockAttribKeysQueryResponse(
 	attribsToReturn []v3.AttributeKey,
 ) {
 	cols := []mockhouse.ColumnType{}
-	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tagKey"})
-	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tagType"})
-	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tagDataType"})
+	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tag_key"})
+	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tag_type"})
+	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "tag_data_type"})
 
 	values := [][]any{}
 	for _, a := range attribsToReturn {
@@ -150,9 +213,9 @@ func (tb *FilterSuggestionsTestBed) mockAttribKeysQueryResponse(
 	}
 
 	tb.mockClickhouse.ExpectQuery(
-		"select.*from.*signoz_logs.distributed_tag_attributes.*",
+		"select.*from.*signoz_logs.distributed_tag_attributes_v2.*",
 	).WithArgs(
-		constants.DefaultFilterSuggestionsLimit,
+		constants.DefaultFilterSuggestionsAttributesLimit,
 	).WillReturnRows(
 		mockhouse.NewRows(cols, values),
 	)
@@ -169,22 +232,29 @@ func (tb *FilterSuggestionsTestBed) mockAttribKeysQueryResponse(
 
 // Mocks response for CH queries made by reader.GetLogAttributeValues
 func (tb *FilterSuggestionsTestBed) mockAttribValuesQueryResponse(
-	expectedAttrib v3.AttributeKey,
-	stringValuesToReturn []string,
+	expectedAttribs []v3.AttributeKey,
+	stringValuesToReturn [][]string,
 ) {
-	cols := []mockhouse.ColumnType{}
-	cols = append(cols, mockhouse.ColumnType{Type: "String", Name: "stringTagValue"})
+	resultCols := []mockhouse.ColumnType{
+		{Type: "String", Name: "tag_key"},
+		{Type: "String", Name: "string_value"},
+		{Type: "Nullable(Int64)", Name: "number_value"},
+	}
 
-	values := [][]any{}
-	for _, v := range stringValuesToReturn {
-		rowValues := []any{}
-		rowValues = append(rowValues, v)
-		values = append(values, rowValues)
+	expectedAttribKeysInQuery := []any{}
+	mockResultRows := [][]any{}
+	for idx, attrib := range expectedAttribs {
+		expectedAttribKeysInQuery = append(expectedAttribKeysInQuery, attrib.Key)
+		for _, stringTagValue := range stringValuesToReturn[idx] {
+			mockResultRows = append(mockResultRows, []any{
+				attrib.Key, stringTagValue, nil,
+			})
+		}
 	}
 
 	tb.mockClickhouse.ExpectQuery(
-		"select distinct.*stringTagValue.*from.*signoz_logs.distributed_tag_attributes.*",
-	).WithArgs(string(expectedAttrib.Key), v3.TagType(expectedAttrib.Type), 1).WillReturnRows(mockhouse.NewRows(cols, values))
+		"select.*tag_key.*string_value.*number_value.*distributed_tag_attributes_v2.*tag_key",
+	).WithArgs(expectedAttribKeysInQuery...).WillReturnRows(mockhouse.NewRows(resultCols, mockResultRows))
 }
 
 type FilterSuggestionsTestBed struct {
@@ -243,6 +313,13 @@ func NewFilterSuggestionsTestBed(t *testing.T) *FilterSuggestionsTestBed {
 	if apiErr != nil {
 		t.Fatalf("could not create a test user: %v", apiErr)
 	}
+
+	logger := zap.NewExample()
+	originalLogger := zap.L()
+	zap.ReplaceGlobals(logger)
+	t.Cleanup(func() {
+		zap.ReplaceGlobals(originalLogger)
+	})
 
 	return &FilterSuggestionsTestBed{
 		t:              t,

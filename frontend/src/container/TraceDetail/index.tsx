@@ -22,7 +22,9 @@ import useUrlQuery from 'hooks/useUrlQuery';
 import { spanServiceNameToColorMapping } from 'lib/getRandomColor';
 import history from 'lib/history';
 import { map } from 'lodash-es';
+import { PanelRight } from 'lucide-react';
 import { SPAN_DETAILS_LEFT_COL_WIDTH } from 'pages/TraceDetail/constants';
+import { useTimezone } from 'providers/Timezone';
 import { useEffect, useMemo, useState } from 'react';
 import { ITraceForest, PayloadProps } from 'types/api/trace/getTraceItem';
 import { getSpanTreeMetadata } from 'utils/getSpanTreeMetadata';
@@ -138,6 +140,8 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 
 	const isDarkMode = useIsDarkMode();
 
+	const { timezone } = useTimezone();
+
 	return (
 		<StyledRow styledclass={[Flex({ flex: 1 })]}>
 			<StyledCol flex="auto" styledclass={styles.leftContainer}>
@@ -194,7 +198,9 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 					{isGlobalTimeVisible && (
 						<styles.TimeStampContainer flex={`${SPAN_DETAILS_LEFT_COL_WIDTH}px`}>
 							<Typography>
-								{dayjs(traceMetaData.globalStart).format('hh:mm:ss a MM/DD')}
+								{dayjs(traceMetaData.globalStart)
+									.tz(timezone.value)
+									.format('hh:mm:ss a (UTC Z) MM/DD')}
 							</Typography>
 						</styles.TimeStampContainer>
 					)}
@@ -267,14 +273,21 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 				collapsed={collapsed}
 				reverseArrow
 				width={300}
-				collapsedWidth={40}
+				collapsedWidth={48}
 				defaultCollapsed
-				onCollapse={(value): void => setCollapsed(value)}
+				trigger={null}
 				data-testid="span-details-sider"
 			>
-				{!collapsed && (
-					<StyledCol styledclass={[styles.selectedSpanDetailContainer]}>
+				<StyledCol styledclass={[styles.selectedSpanDetailContainer]}>
+					{collapsed ? (
+						<Button
+							className="periscope-btn nav-item-label expand-collapse-btn"
+							icon={<PanelRight size={16} />}
+							onClick={(): void => setCollapsed((prev) => !prev)}
+						/>
+					) : (
 						<SelectedSpanDetails
+							setCollapsed={setCollapsed}
 							firstSpanStartTime={firstSpanStartTime}
 							traceStartTime={traceStartTime}
 							traceEndTime={traceEndTime}
@@ -287,8 +300,8 @@ function TraceDetail({ response }: TraceDetailProps): JSX.Element {
 								.filter(Boolean)
 								.find((tree) => tree)}
 						/>
-					</StyledCol>
-				)}
+					)}
+				</StyledCol>
 			</Sider>
 		</StyledRow>
 	);

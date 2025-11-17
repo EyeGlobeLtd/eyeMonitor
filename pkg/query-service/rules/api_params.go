@@ -42,16 +42,6 @@ var (
 // this file contains api request and responses to be
 // served over http
 
-// newApiErrorInternal returns a new api error object of type internal
-func newApiErrorInternal(err error) *model.ApiError {
-	return &model.ApiError{Typ: model.ErrorInternal, Err: err}
-}
-
-// newApiErrorBadData returns a new api error object of bad request type
-func newApiErrorBadData(err error) *model.ApiError {
-	return &model.ApiError{Typ: model.ErrorBadData, Err: err}
-}
-
 // PostableRule is used to create alerting rule from HTTP api
 type PostableRule struct {
 	AlertName   string    `yaml:"alert,omitempty" json:"alert,omitempty"`
@@ -133,7 +123,9 @@ func parseIntoRule(initRule PostableRule, content []byte, kind RuleDataKind) (*P
 
 	if rule.RuleCondition != nil {
 		if rule.RuleCondition.CompositeQuery.QueryType == v3.QueryTypeBuilder {
-			rule.RuleType = RuleTypeThreshold
+			if rule.RuleType == "" {
+				rule.RuleType = RuleTypeThreshold
+			}
 		} else if rule.RuleCondition.CompositeQuery.QueryType == v3.QueryTypePromQL {
 			rule.RuleType = RuleTypeProm
 		}
@@ -168,16 +160,60 @@ func isValidLabelValue(v string) bool {
 	return utf8.ValidString(v)
 }
 
+func isAllQueriesDisabled(compositeQuery *v3.CompositeQuery) bool {
+	if compositeQuery == nil {
+		return false
+	}
+	if compositeQuery.BuilderQueries == nil && compositeQuery.PromQueries == nil && compositeQuery.ClickHouseQueries == nil {
+		return false
+	}
+	switch compositeQuery.QueryType {
+	case v3.QueryTypeBuilder:
+		if len(compositeQuery.BuilderQueries) == 0 {
+			return false
+		}
+		for _, query := range compositeQuery.BuilderQueries {
+			if !query.Disabled {
+				return false
+			}
+		}
+	case v3.QueryTypePromQL:
+		if len(compositeQuery.PromQueries) == 0 {
+			return false
+		}
+		for _, query := range compositeQuery.PromQueries {
+			if !query.Disabled {
+				return false
+			}
+		}
+	case v3.QueryTypeClickHouseSQL:
+		if len(compositeQuery.ClickHouseQueries) == 0 {
+			return false
+		}
+		for _, query := range compositeQuery.ClickHouseQueries {
+			if !query.Disabled {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (r *PostableRule) Validate() error {
 
 	var errs []error
 
 	if r.RuleCondition == nil {
-		errs = append(errs, errors.Errorf("rule condition is required"))
+		// will get panic if we try to access CompositeQuery, so return here
+		return errors.Errorf("rule condition is required")
 	} else {
 		if r.RuleCondition.CompositeQuery == nil {
 			errs = append(errs, errors.Errorf("composite metric query is required"))
 		}
+	}
+
+	if isAllQueriesDisabled(r.RuleCondition.CompositeQuery) {
+		errs = append(errs, errors.Errorf("all queries are disabled in rule condition"))
 	}
 
 	if r.RuleType == RuleTypeThreshold {
@@ -259,8 +295,8 @@ type GettableRules struct {
 
 // GettableRule has info for an alerting rules.
 type GettableRule struct {
-	Id    string     `json:"id"`
-	State AlertState `json:"state"`
+	Id    string           `json:"id"`
+	State model.AlertState `json:"state"`
 	PostableRule
 	CreatedAt *time.Time `json:"createAt"`
 	CreatedBy *string    `json:"createBy"`

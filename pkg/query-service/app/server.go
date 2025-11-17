@@ -66,6 +66,8 @@ type ServerOptions struct {
 	CacheConfigPath   string
 	FluxInterval      string
 	Cluster           string
+	UseLogsNewSchema  bool
+	UseTraceNewSchema bool
 }
 
 // Server runs HTTP, Mux and a grpc server
@@ -128,6 +130,8 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 			serverOptions.MaxOpenConns,
 			serverOptions.DialTimeout,
 			serverOptions.Cluster,
+			serverOptions.UseLogsNewSchema,
+			serverOptions.UseTraceNewSchema,
 		)
 		go clickhouseReader.Start(readerReady)
 		reader = clickhouseReader
@@ -142,9 +146,20 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 			return nil, err
 		}
 	}
+	var c cache.Cache
+	if serverOptions.CacheConfigPath != "" {
+		cacheOpts, err := cache.LoadFromYAMLCacheConfigFile(serverOptions.CacheConfigPath)
+		if err != nil {
+			return nil, err
+		}
+		c = cache.NewCache(cacheOpts)
+	}
 
 	<-readerReady
-	rm, err := makeRulesManager(serverOptions.PromConfigPath, constants.GetAlertManagerApiPrefix(), serverOptions.RuleRepoURL, localDB, reader, serverOptions.DisableRules, fm)
+	rm, err := makeRulesManager(
+		serverOptions.PromConfigPath,
+		constants.GetAlertManagerApiPrefix(),
+		serverOptions.RuleRepoURL, localDB, reader, c, serverOptions.DisableRules, fm, serverOptions.UseLogsNewSchema, serverOptions.UseTraceNewSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -155,15 +170,6 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 			zap.L().Error("error while running clickhouse migrations", zap.Error(err))
 		}
 	}()
-
-	var c cache.Cache
-	if serverOptions.CacheConfigPath != "" {
-		cacheOpts, err := cache.LoadFromYAMLCacheConfigFile(serverOptions.CacheConfigPath)
-		if err != nil {
-			return nil, err
-		}
-		c = cache.NewCache(cacheOpts)
-	}
 
 	fluxInterval, err := time.ParseDuration(serverOptions.FluxInterval)
 	if err != nil {
@@ -197,6 +203,8 @@ func NewServer(serverOptions *ServerOptions) (*Server, error) {
 		LogsParsingPipelineController: logParsingPipelineController,
 		Cache:                         c,
 		FluxInterval:                  fluxInterval,
+		UseLogsNewSchema:              serverOptions.UseLogsNewSchema,
+		UseTraceNewSchema:             serverOptions.UseTraceNewSchema,
 	})
 	if err != nil {
 		return nil, err
@@ -278,10 +286,10 @@ func (s *Server) createPublicServer(api *APIHandler) (*http.Server, error) {
 
 	r := NewRouter()
 
-	r.Use(LogCommentEnricher)
 	r.Use(setTimeoutMiddleware)
 	r.Use(s.analyticsMiddleware)
 	r.Use(loggingMiddleware)
+	r.Use(LogCommentEnricher)
 
 	// add auth middleware
 	getUserFromRequest := func(r *http.Request) (*model.UserPayload, error) {
@@ -303,6 +311,7 @@ func (s *Server) createPublicServer(api *APIHandler) (*http.Server, error) {
 	api.RegisterLogsRoutes(r, am)
 	api.RegisterIntegrationRoutes(r, am)
 	api.RegisterQueryRangeV3Routes(r, am)
+	api.RegisterInfraMetricsRoutes(r, am)
 	api.RegisterWebSocketPaths(r, am)
 	api.RegisterQueryRangeV4Routes(r, am)
 	api.RegisterMessagingQueuesRoutes(r, am)
@@ -378,6 +387,8 @@ func LogCommentEnricher(next http.Handler) http.Handler {
 			client = "api"
 		}
 
+		email, _ := auth.GetEmailFromJwt(r.Context())
+
 		kvs := map[string]string{
 			"path":        path,
 			"dashboardID": dashboardID,
@@ -386,6 +397,7 @@ func LogCommentEnricher(next http.Handler) http.Handler {
 			"client":      client,
 			"viewName":    viewName,
 			"servicesTab": tab,
+			"email":       email,
 		}
 
 		r = r.WithContext(context.WithValue(r.Context(), common.LogCommentKey, kvs))
@@ -707,13 +719,16 @@ func (s *Server) Stop() error {
 }
 
 func makeRulesManager(
-	promConfigPath,
+	_,
 	alertManagerURL string,
 	ruleRepoURL string,
 	db *sqlx.DB,
 	ch interfaces.Reader,
+	cache cache.Cache,
 	disableRules bool,
-	fm interfaces.FeatureLookup) (*rules.Manager, error) {
+	fm interfaces.FeatureLookup,
+	useLogsNewSchema bool,
+	useTraceNewSchema bool) (*rules.Manager, error) {
 
 	// create engine
 	pqle, err := pqle.FromReader(ch)
@@ -730,19 +745,19 @@ func makeRulesManager(
 
 	// create manager opts
 	managerOpts := &rules.ManagerOptions{
-		NotifierOpts: notifierOpts,
-		Queriers: &rules.Queriers{
-			PqlEngine: pqle,
-			Ch:        ch.GetConn(),
-		},
-		RepoURL:      ruleRepoURL,
-		DBConn:       db,
-		Context:      context.Background(),
-		Logger:       nil,
-		DisableRules: disableRules,
-		FeatureFlags: fm,
-		Reader:       ch,
-		EvalDelay:    constants.GetEvalDelay(),
+		NotifierOpts:      notifierOpts,
+		PqlEngine:         pqle,
+		RepoURL:           ruleRepoURL,
+		DBConn:            db,
+		Context:           context.Background(),
+		Logger:            zap.L(),
+		DisableRules:      disableRules,
+		FeatureFlags:      fm,
+		Reader:            ch,
+		Cache:             cache,
+		EvalDelay:         constants.GetEvalDelay(),
+		UseLogsNewSchema:  useLogsNewSchema,
+		UseTraceNewSchema: useTraceNewSchema,
 	}
 
 	// create Manager

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"go.signoz.io/signoz/pkg/query-service/constants"
 	basemodel "go.signoz.io/signoz/pkg/query-service/model"
 )
 
@@ -8,12 +9,26 @@ const SSO = "SSO"
 const Basic = "BASIC_PLAN"
 const Pro = "PRO_PLAN"
 const Enterprise = "ENTERPRISE_PLAN"
+
+var (
+	PlanNameEnterprise = "ENTERPRISE"
+	PlanNameTeams      = "TEAMS"
+	PlanNameBasic      = "BASIC"
+)
+
+var (
+	MapOldPlanKeyToNewPlanName map[string]string = map[string]string{PlanNameBasic: Basic, PlanNameTeams: Pro, PlanNameEnterprise: Enterprise}
+)
+
+var (
+	LicenseStatusInactive = "INACTIVE"
+)
+
 const DisableUpsell = "DISABLE_UPSELL"
 const Onboarding = "ONBOARDING"
 const ChatSupport = "CHAT_SUPPORT"
 const Gateway = "GATEWAY"
 const PremiumSupport = "PREMIUM_SUPPORT"
-const QueryBuilderSearchV2 = "QUERY_BUILDER_SEARCH_V2"
 
 var BasicPlan = basemodel.FeatureSet{
 	basemodel.Feature{
@@ -129,8 +144,15 @@ var BasicPlan = basemodel.FeatureSet{
 		Route:      "",
 	},
 	basemodel.Feature{
-		Name:       QueryBuilderSearchV2,
+		Name:       basemodel.AnomalyDetection,
 		Active:     false,
+		Usage:      0,
+		UsageLimit: -1,
+		Route:      "",
+	},
+	basemodel.Feature{
+		Name:       basemodel.HostsInfraMonitoring,
+		Active:     constants.EnableHostsInfraMonitoring(),
 		Usage:      0,
 		UsageLimit: -1,
 		Route:      "",
@@ -244,8 +266,15 @@ var ProPlan = basemodel.FeatureSet{
 		Route:      "",
 	},
 	basemodel.Feature{
-		Name:       QueryBuilderSearchV2,
-		Active:     false,
+		Name:       basemodel.AnomalyDetection,
+		Active:     true,
+		Usage:      0,
+		UsageLimit: -1,
+		Route:      "",
+	},
+	basemodel.Feature{
+		Name:       basemodel.HostsInfraMonitoring,
+		Active:     constants.EnableHostsInfraMonitoring(),
 		Usage:      0,
 		UsageLimit: -1,
 		Route:      "",
@@ -373,8 +402,15 @@ var EnterprisePlan = basemodel.FeatureSet{
 		Route:      "",
 	},
 	basemodel.Feature{
-		Name:       QueryBuilderSearchV2,
-		Active:     false,
+		Name:       basemodel.AnomalyDetection,
+		Active:     true,
+		Usage:      0,
+		UsageLimit: -1,
+		Route:      "",
+	},
+	basemodel.Feature{
+		Name:       basemodel.HostsInfraMonitoring,
+		Active:     constants.EnableHostsInfraMonitoring(),
 		Usage:      0,
 		UsageLimit: -1,
 		Route:      "",

@@ -7,6 +7,8 @@
 		width: calc(100% - 64px);
 		z-index: 0;
 
+		margin: 0 auto;
+
 		.content-container {
 			position: relative;
 			margin: 0 1rem;
@@ -14,12 +16,6 @@
 			flex-direction: column;
 			height: 100%;
 			width: 100%;
-		}
-	}
-
-	&.docked {
-		.app-content {
-			width: calc(100% - 240px);
 		}
 	}
 }
@@ -108,6 +104,13 @@
 .trial-expiry-banner {
 	padding: 8px;
 	background-color: #f25733;
+	color: white;
+	text-align: center;
+}
+
+.payment-failed-banner {
+	padding: 8px;
+	background-color: var(--bg-sakura-500);
 	color: white;
 	text-align: center;
 }

@@ -3,7 +3,7 @@
 import './SideNav.styles.scss';
 
 import { Color } from '@signozhq/design-tokens';
-import { Button, Tooltip } from 'antd';
+import { Button } from 'antd';
 import logEvent from 'api/common/logEvent';
 import cx from 'classnames';
 import { FeatureKeys } from 'constants/features';
@@ -16,10 +16,7 @@ import history from 'lib/history';
 import {
 	AlertTriangle,
 	CheckSquare,
-	ChevronLeftCircle,
-	ChevronRightCircle,
-	PanelRight,
-	RocketIcon,
+	PackagePlus,
 	UserCircle,
 } from 'lucide-react';
 import { MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
@@ -55,13 +52,9 @@ interface UserManagementMenuItems {
 function SideNav({
 	licenseData,
 	isFetching,
-	onCollapse,
-	collapsed,
 }: {
 	licenseData: any;
 	isFetching: boolean;
-	onCollapse: () => void;
-	collapsed: boolean;
 }): JSX.Element {
 	const [menuItems, setMenuItems] = useState(defaultMenuItems);
 
@@ -120,10 +113,13 @@ function SideNav({
 		if (!isOnboardingEnabled || !isCloudUser()) {
 			let items = [...menuItems];
 
-			items = items.filter((item) => item.key !== ROUTES.GET_STARTED);
+			items = items.filter(
+				(item) => item.key !== ROUTES.GET_STARTED && item.key !== ROUTES.ONBOARDING,
+			);
 
 			setMenuItems(items);
 		}
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [featureResponse.data]);
 
@@ -330,8 +326,6 @@ function SideNav({
 	};
 
 	useEffect(() => {
-		registerShortcut(GlobalShortcuts.SidebarCollapse, onCollapse);
-
 		registerShortcut(GlobalShortcuts.NavigateToServices, () =>
 			onClickHandler(ROUTES.APPLICATION, null),
 		);
@@ -359,7 +353,6 @@ function SideNav({
 		);
 
 		return (): void => {
-			deregisterShortcut(GlobalShortcuts.SidebarCollapse);
 			deregisterShortcut(GlobalShortcuts.NavigateToServices);
 			deregisterShortcut(GlobalShortcuts.NavigateToTraces);
 			deregisterShortcut(GlobalShortcuts.NavigateToLogs);
@@ -368,11 +361,11 @@ function SideNav({
 			deregisterShortcut(GlobalShortcuts.NavigateToExceptions);
 			deregisterShortcut(GlobalShortcuts.NavigateToMessagingQueues);
 		};
-	}, [deregisterShortcut, onClickHandler, onCollapse, registerShortcut]);
+	}, [deregisterShortcut, onClickHandler, registerShortcut]);
 
 	return (
-		<div className={cx('sidenav-container', !collapsed ? 'docked' : '')}>
-			<div className={cx('sideNav', !collapsed ? 'docked' : '')}>
+		<div className={cx('sidenav-container')}>
+			<div className={cx('sideNav')}>
 				<div className="brand">
 					<div className="brand-company-meta">
 						<div
@@ -392,17 +385,6 @@ function SideNav({
 							<div className="license tag nav-item-label">{licenseTag}</div>
 						)}
 					</div>
-
-					<Tooltip
-						title={collapsed ? 'Dock Sidebar' : 'Undock Sidebar'}
-						placement="right"
-					>
-						<Button
-							className="periscope-btn nav-item-label dockBtn"
-							icon={<PanelRight size={16} />}
-							onClick={onCollapse}
-						/>
-					</Tooltip>
 				</div>
 
 				{isCloudUserVal && (
@@ -413,9 +395,9 @@ function SideNav({
 								onClickGetStarted(event);
 							}}
 						>
-							<RocketIcon size={16} />
+							<PackagePlus size={16} />
 
-							<div className="license tag nav-item-label"> Get Started </div>
+							<div className="license tag nav-item-label"> New source </div>
 						</Button>
 					</div>
 				)}
@@ -504,14 +486,6 @@ function SideNav({
 								}}
 							/>
 						)}
-
-						<div className="collapse-expand-handlers" onClick={onCollapse}>
-							{collapsed ? (
-								<ChevronRightCircle size={18} />
-							) : (
-								<ChevronLeftCircle size={18} />
-							)}
-						</div>
 					</div>
 				</div>
 			</div>

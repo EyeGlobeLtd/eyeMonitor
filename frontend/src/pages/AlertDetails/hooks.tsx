@@ -17,6 +17,7 @@ import AlertHistory from 'container/AlertHistory';
 import { TIMELINE_TABLE_PAGE_SIZE } from 'container/AlertHistory/constants';
 import { AlertDetailsTab, TimelineFilter } from 'container/AlertHistory/types';
 import { urlKey } from 'container/AllError/utils';
+import { RelativeTimeMap } from 'container/TopNav/DateTimeSelection/config';
 import useAxiosError from 'hooks/useAxiosError';
 import { useNotifications } from 'hooks/useNotifications';
 import useUrlQuery from 'hooks/useUrlQuery';
@@ -26,13 +27,12 @@ import history from 'lib/history';
 import { History, Table } from 'lucide-react';
 import EditRules from 'pages/EditRules';
 import { OrderPreferenceItems } from 'pages/Logs/config';
+import BetaTag from 'periscope/components/BetaTag/BetaTag';
 import PaginationInfoText from 'periscope/components/PaginationInfoText/PaginationInfoText';
 import { useAlertRule } from 'providers/Alert';
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
-import { useSelector } from 'react-redux';
 import { generatePath, useLocation } from 'react-router-dom';
-import { AppState } from 'store/reducers';
 import { ErrorResponse, SuccessResponse } from 'types/api';
 import {
 	AlertDef,
@@ -43,7 +43,7 @@ import {
 	AlertRuleTopContributorsPayload,
 } from 'types/api/alerts/def';
 import { PayloadProps } from 'types/api/alerts/get';
-import { GlobalReducer } from 'types/reducer/globalTime';
+import { TagFilter } from 'types/api/queryBuilder/queryBuilderData';
 import { nanoToMilli } from 'utils/timeUtils';
 
 export const useAlertHistoryQueryParams = (): {
@@ -55,11 +55,13 @@ export const useAlertHistoryQueryParams = (): {
 } => {
 	const params = useUrlQuery();
 
-	const globalTime = useSelector<AppState, GlobalReducer>(
-		(state) => state.globalTime,
-	);
 	const startTime = params.get(QueryParams.startTime);
 	const endTime = params.get(QueryParams.endTime);
+	const relativeTimeParam = params.get(QueryParams.relativeTime);
+
+	const relativeTime =
+		(relativeTimeParam === 'null' ? null : relativeTimeParam) ??
+		RelativeTimeMap['6hr'];
 
 	const intStartTime = parseInt(startTime || '0', 10);
 	const intEndTime = parseInt(endTime || '0', 10);
@@ -68,8 +70,8 @@ export const useAlertHistoryQueryParams = (): {
 	const { maxTime, minTime } = useMemo(() => {
 		if (hasStartAndEndParams)
 			return GetMinMax('custom', [intStartTime, intEndTime]);
-		return GetMinMax(globalTime.selectedTime);
-	}, [hasStartAndEndParams, intStartTime, intEndTime, globalTime.selectedTime]);
+		return GetMinMax(relativeTime);
+	}, [hasStartAndEndParams, intStartTime, intEndTime, relativeTime]);
 
 	const ruleId = params.get(QueryParams.ruleId);
 
@@ -125,6 +127,7 @@ export const useRouteTabUtils = (): { routes: TabRoutes[] } => {
 				<div className="tab-item">
 					<History size={14} />
 					History
+					<BetaTag />
 				</div>
 			),
 			route: getRouteUrl(AlertDetailsTab.HISTORY),
@@ -162,7 +165,6 @@ export const useGetAlertRuleDetails = (): Props => {
 				id: parseInt(ruleId || '', 10),
 			}),
 		enabled: isValidRuleId,
-		refetchOnMount: false,
 		refetchOnWindowFocus: false,
 	});
 
@@ -251,12 +253,16 @@ type GetAlertRuleDetailsTimelineTableProps = GetAlertRuleDetailsApiProps & {
 		| undefined;
 };
 
-export const useGetAlertRuleDetailsTimelineTable = (): GetAlertRuleDetailsTimelineTableProps => {
+export const useGetAlertRuleDetailsTimelineTable = ({
+	filters,
+}: {
+	filters: TagFilter;
+}): GetAlertRuleDetailsTimelineTableProps => {
 	const { ruleId, startTime, endTime, params } = useAlertHistoryQueryParams();
 	const { updatedOrder, offset } = useMemo(
 		() => ({
 			updatedOrder: params.get(urlKey.order) ?? OrderPreferenceItems.ASC,
-			offset: parseInt(params.get(urlKey.offset) ?? '1', 10),
+			offset: parseInt(params.get(urlKey.offset) ?? '0', 10),
 		}),
 		[params],
 	);
@@ -275,6 +281,7 @@ export const useGetAlertRuleDetailsTimelineTable = (): GetAlertRuleDetailsTimeli
 			timelineFilter,
 			updatedOrder,
 			offset,
+			JSON.stringify(filters.items),
 		],
 		{
 			queryFn: () =>
@@ -285,7 +292,7 @@ export const useGetAlertRuleDetailsTimelineTable = (): GetAlertRuleDetailsTimeli
 					limit: TIMELINE_TABLE_PAGE_SIZE,
 					order: updatedOrder,
 					offset,
-
+					filters,
 					...(timelineFilter && timelineFilter !== TimelineFilter.ALL
 						? {
 								state: timelineFilter === TimelineFilter.FIRED ? 'firing' : 'normal',
@@ -370,9 +377,9 @@ export const useAlertRuleStatusToggle = ({
 }: {
 	ruleId: string;
 }): {
-	handleAlertStateToggle: (state: boolean) => void;
+	handleAlertStateToggle: () => void;
 } => {
-	const { isAlertRuleDisabled, setIsAlertRuleDisabled } = useAlertRule();
+	const { alertRuleState, setAlertRuleState } = useAlertRule();
 	const { notifications } = useNotifications();
 
 	const queryClient = useQueryClient();
@@ -382,16 +389,17 @@ export const useAlertRuleStatusToggle = ({
 		[REACT_QUERY_KEY.TOGGLE_ALERT_STATE, ruleId],
 		patchAlert,
 		{
-			onMutate: () => {
-				setIsAlertRuleDisabled((prev) => !prev);
-			},
-			onSuccess: () => {
+			onSuccess: (data) => {
+				setAlertRuleState(data?.payload?.state);
+
 				notifications.success({
-					message: `Alert has been ${isAlertRuleDisabled ? 'enabled' : 'disabled'}.`,
+					message: `Alert has been ${
+						data?.payload?.state === 'disabled' ? 'disabled' : 'enabled'
+					}.`,
 				});
 			},
 			onError: (error) => {
-				queryClient.refetchQueries([REACT_QUERY_KEY.ALERT_RULE_DETAILS]);
+				queryClient.refetchQueries([REACT_QUERY_KEY.ALERT_RULE_DETAILS, ruleId]);
 				handleError(error);
 			},
 		},
@@ -400,7 +408,7 @@ export const useAlertRuleStatusToggle = ({
 	const handleAlertStateToggle = (): void => {
 		const args = {
 			id: parseInt(ruleId, 10),
-			data: { disabled: !isAlertRuleDisabled },
+			data: { disabled: alertRuleState !== 'disabled' },
 		};
 		toggleAlertState(args);
 	};
@@ -458,6 +466,44 @@ export const useAlertRuleDuplicate = ({
 	};
 
 	return { handleAlertDuplicate };
+};
+export const useAlertRuleUpdate = ({
+	alertDetails,
+	setUpdatedName,
+	intermediateName,
+}: {
+	alertDetails: AlertDef;
+	setUpdatedName: (name: string) => void;
+	intermediateName: string;
+}): {
+	handleAlertUpdate: () => void;
+	isLoading: boolean;
+} => {
+	const { notifications } = useNotifications();
+	const handleError = useAxiosError();
+
+	const { mutate: updateAlertRule, isLoading } = useMutation(
+		[REACT_QUERY_KEY.UPDATE_ALERT_RULE, alertDetails.id],
+		save,
+		{
+			onMutate: () => setUpdatedName(intermediateName),
+			onSuccess: () =>
+				notifications.success({ message: 'Alert renamed successfully' }),
+			onError: (error) => {
+				setUpdatedName(alertDetails.alert);
+				handleError(error);
+			},
+		},
+	);
+
+	const handleAlertUpdate = (): void => {
+		updateAlertRule({
+			data: { ...alertDetails, alert: intermediateName },
+			id: alertDetails.id,
+		});
+	};
+
+	return { handleAlertUpdate, isLoading };
 };
 
 export const useAlertRuleDelete = ({

@@ -50,6 +50,7 @@ import {
 } from 'lodash-es';
 import { Sliders } from 'lucide-react';
 import { SELECTED_VIEWS } from 'pages/LogsExplorer/utils';
+import { useTimezone } from 'providers/Timezone';
 import {
 	memo,
 	MutableRefObject,
@@ -64,6 +65,7 @@ import { useHistory } from 'react-router-dom';
 import { AppState } from 'store/reducers';
 import { Dashboard } from 'types/api/dashboard/getAll';
 import { ILog } from 'types/api/logs/log';
+import { DataTypes } from 'types/api/queryBuilder/queryAutocompleteResponse';
 import {
 	IBuilderQuery,
 	OrderByPayload,
@@ -132,6 +134,9 @@ function LogsExplorerViews({
 	// State
 	const [page, setPage] = useState<number>(1);
 	const [logs, setLogs] = useState<ILog[]>([]);
+	const [lastLogLineTimestamp, setLastLogLineTimestamp] = useState<
+		number | string | null
+	>();
 	const [requestData, setRequestData] = useState<Query | null>(null);
 	const [showFormatMenuItems, setShowFormatMenuItems] = useState(false);
 	const [queryId, setQueryId] = useState<string>(v4());
@@ -188,6 +193,17 @@ function LogsExplorerViews({
 		const modifiedQueryData: IBuilderQuery = {
 			...listQuery,
 			aggregateOperator: LogsAggregatorOperator.COUNT,
+			groupBy: [
+				{
+					key: 'severity_text',
+					dataType: DataTypes.String,
+					type: '',
+					isColumn: true,
+					isJSON: false,
+					id: 'severity_text--string----true',
+				},
+			],
+			legend: '{{severity_text}}',
 		};
 
 		const modifiedQuery: Query = {
@@ -259,6 +275,14 @@ function LogsExplorerViews({
 					start: minTime,
 					end: maxTime,
 				}),
+			// send the lastLogTimeStamp only when the panel type is list and the orderBy is timestamp and the order is desc
+			lastLogLineTimestamp:
+				panelType === PANEL_TYPES.LIST &&
+				requestData?.builder?.queryData?.[0]?.orderBy?.[0]?.columnName ===
+					'timestamp' &&
+				requestData?.builder?.queryData?.[0]?.orderBy?.[0]?.order === 'desc'
+					? lastLogLineTimestamp
+					: undefined,
 		},
 		undefined,
 		listQueryKeyRef,
@@ -335,6 +359,10 @@ function LogsExplorerViews({
 				log: orderByTimestamp ? lastLog : null,
 				pageSize: nextPageSize,
 			});
+
+			// initialise the last log timestamp to null as we don't have the logs.
+			// as soon as we scroll to the end of the logs we set the lastLogLineTimestamp to the last log timestamp.
+			setLastLogLineTimestamp(lastLog.timestamp);
 
 			setPage((prevPage) => prevPage + 1);
 
@@ -529,6 +557,11 @@ function LogsExplorerViews({
 	}, [data]);
 
 	useEffect(() => {
+		// clear the lastLogLineTimestamp when the data changes
+		setLastLogLineTimestamp(null);
+	}, [data]);
+
+	useEffect(() => {
 		if (
 			requestData?.id !== stagedQuery?.id ||
 			currentMinTimeRef.current !== minTime
@@ -637,13 +670,19 @@ function LogsExplorerViews({
 		setIsLoadingQueries,
 	]);
 
+	const { timezone } = useTimezone();
+
 	const flattenLogData = useMemo(
 		() =>
 			logs.map((log) => {
 				const timestamp =
 					typeof log.timestamp === 'string'
-						? dayjs(log.timestamp).format('YYYY-MM-DD HH:mm:ss.SSS')
-						: dayjs(log.timestamp / 1e6).format('YYYY-MM-DD HH:mm:ss.SSS');
+						? dayjs(log.timestamp)
+								.tz(timezone.value)
+								.format('YYYY-MM-DD HH:mm:ss.SSS')
+						: dayjs(log.timestamp / 1e6)
+								.tz(timezone.value)
+								.format('YYYY-MM-DD HH:mm:ss.SSS');
 
 				return FlatLogData({
 					timestamp,
@@ -651,7 +690,7 @@ function LogsExplorerViews({
 					...omit(log, 'timestamp', 'body'),
 				});
 			}),
-		[logs],
+		[logs, timezone.value],
 	);
 
 	return (
@@ -661,6 +700,7 @@ function LogsExplorerViews({
 					className="logs-histogram"
 					isLoading={isFetchingListChartData || isLoadingListChartData}
 					data={chartData}
+					isLogsExplorerViews={panelType === PANEL_TYPES.LIST}
 				/>
 			)}
 
